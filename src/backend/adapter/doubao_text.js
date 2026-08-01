@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @fileoverview 豆包 (Doubao) 文本生成适配器
  */
 
@@ -36,9 +36,10 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
 
     // 模型 ID 到菜单项无障碍名称的正则表达式映射（兼容英文、简繁体中文）
     const MODEL_MENU_MAP = {
-        'seed': /Fast Solves most questions|快速 适用于大部分情况|快速 適用於大部分情況/,
-        'seed-thinking': /Think Solves more complex problems|思考 擅长解决更难的问题|思考 擅長解決更難的問題/,
-        'seed-pro': /Pro Advanced Pro model|专家 研究级智能模型|專家 研究級智慧模型/
+        'seed':          /Fast|快速|快速模式/i,
+        'seed-thinking': /Pro Advanced Pro model|专家|專家 研究級智慧模型/,
+        'seed-pro': /Pro Advanced Pro model|专家|專家 研究級智慧模型/
+
     };
 
     try {
@@ -74,9 +75,14 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
                 await sleep(500, 1000);
                 await safeClick(page, modelSelectorBtn, { bias: 'button' });
                 try {
-                    await menuItem.waitFor({ state: 'visible', timeout: 3000 });
+                    await menuItem.waitFor({ state: 'visible', timeout: 5000 });
                     break; // 菜单弹出，退出重试
                 } catch {
+                    // 调试：打印所有 menuitem 文本，帮助排查豆包文案变更
+                    try {
+                        const allItems = await page.locator('[role="menuitem"]').allTextContents();
+                        logger.warn('适配器', `[调试] 当前菜单项: ${JSON.stringify(allItems)}`, meta);
+                    } catch(e) {}
                     logger.warn('适配器', `模型菜单未弹出，重试 ${attempt}/3`, meta);
                     if (attempt === 3) throw new Error('模型选择菜单未弹出');
                 }
