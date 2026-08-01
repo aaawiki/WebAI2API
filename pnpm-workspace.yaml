@@ -1,5 +1,6 @@
-ignoredBuiltDependencies:
+allowBuild:
   - better-sqlite3
+  - sharp
 
 packages:
   - '!webui/**'

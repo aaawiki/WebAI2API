@@ -23,10 +23,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. 复制依赖文件、脚本和补丁目录，然后安装
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY scripts/ ./scripts/
 COPY patches/ ./patches/
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+RUN npm install -g pnpm && pnpm install --frozen-lockfile --ignore-scripts
+# pnpm 11 默认忽略 native 构建脚本，需要手动应用补丁并重建 native 依赖
+RUN node scripts/postinstall.js && pnpm rebuild better-sqlite3 sharp
 
 # 3. 复制源码并初始化
 COPY . .
