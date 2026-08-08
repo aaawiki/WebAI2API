@@ -107,19 +107,48 @@
 > - 可通过 WebUI 的虚拟显示器板块连接
 > - **WebUI 传输过程未加密, 公网环境请使用 SSH 隧道或 HTTPS**
 
+> [!NOTE]
+> **镜像来源**: 官方镜像为 `foxhui/webai-2api:latest`。本项目维护的镜像发布在 GitHub Container Registry:
+> `ghcr.io/aaawiki/webai-2api:latest` (含豆包文本适配器菜单文案修复)。下文示例默认使用该镜像。
+
 **Docker CLI 启动**
 ```bash
 docker run -d --name webai-2api \
   -p 3000:3000 \
   -v "$(pwd)/data:/app/data" \
   --shm-size=2gb \
-  foxhui/webai-2api:latest
+  --restart unless-stopped \
+  ghcr.io/aaawiki/webai-2api:latest
 ```
+
+**一键启动脚本**
+项目提供了 `scripts/start-server.sh`, 自动完成「创建工作目录 → 拉取镜像 → 启动容器」:
+
+```bash
+# 直接使用仓库根目录的极简脚本
+./start.sh
+
+# 或使用功能更完整的脚本 (支持 restart/stop/logs/status 等子命令)
+chmod +x scripts/start-server.sh
+./scripts/start-server.sh              # 创建目录、拉取镜像、启动容器
+./scripts/start-server.sh restart      # 重启容器
+./scripts/start-server.sh stop         # 停止并删除容器
+./scripts/start-server.sh logs         # 跟踪查看日志
+./scripts/start-server.sh status       # 查看容器状态
+```
+
+> 私有镜像需要先登录 GHCR: `echo <你的PAT> | docker login ghcr.io -u aaawiki --password-stdin`
+> (PAT 需 `read:packages` 权限), 或运行 `GHCR_TOKEN=<PAT> ./scripts/start-server.sh`。
 
 **Docker Compose 启动**
 ```bash
 docker-compose up -d
 ```
+
+> [!TIP]
+> **端口绑定建议**: 若通过 SSH 隧道访问, 建议只绑定本机 `-p 127.0.0.1:3000:3000`,
+> 然后在本地执行 `ssh -L 3000:127.0.0.1:3000 user@<服务器IP>` 后访问 `http://localhost:3000`,
+> 避免 WebUI / API 直接暴露公网。
 
 ---
 
