@@ -33,7 +33,7 @@ const TARGET_URL_SEARCH = 'https://arena.ai/search/direct';
 async function generate(context, prompt, imgPaths, modelId, meta = {}) {
     const { page, config } = context;
     const waitTimeout = config?.backend?.pool?.waitTimeout ?? 120000;
-    const textareaSelector = 'textarea';
+    const textareaSelector = 'textarea[name="message"]';
 
     // Worker 已验证，直接解析模型配置
     const modelConfig = manifest.models.find(m => m.id === modelId);
@@ -47,57 +47,158 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
         // 1. 等待输入框加载
         await waitForInput(page, textareaSelector, { click: false });
 
-        // 2. 选择模型
+        // 2. 页面会自动聚焦聊天输入框。按用户的真实操作：
+        //    先用鼠标点击输入框外的空白处，让焦点离开聊天输入框，
+        //    后续 Shift+Tab + Enter 才能打开模型选择器而不是在输入框内操作。
+        try {
+            await page.waitForFunction(
+                () => {
+                    const active = document.activeElement;
+                    return active && (active.tagName === 'TEXTAREA' || active.getAttribute?.('name') === 'message');
+                },
+                null,
+                { timeout: 3000 }
+            );
+        } catch {
+            // 页面未自动聚焦时无需处理
+        }
+
+        // 模拟鼠标点击聊天区域之外的空白处（避开按钮/链接/输入框）
+        const clickBlankSpace = async () => {
+            const viewport = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+            const point = await page.evaluate(({ w, h }) => {
+                const ta = document.querySelector('textarea[name="message"]');
+                const interactive = (el) => {
+                    if (!el || !(el instanceof Element)) return true;
+                    if (el.closest?.('button, a, input, textarea, select, [role="button"], [role="option"], [role="combobox"]')) {
+                        return true;
+                    }
+                    if (ta && el === ta) return true;
+                    return false;
+                };
+                const candidates = [
+                    { x: Math.round(w * 0.5), y: Math.round(h * 0.18) },
+                    { x: Math.round(w * 0.5), y: Math.round(h * 0.4) },
+                    { x: Math.round(w * 0.72), y: Math.round(h * 0.3) },
+                    { x: Math.round(w * 0.5), y: Math.round(h * 0.62) }
+                ];
+                const safe = candidates.find(c => {
+                    const el = document.elementFromPoint(c.x, c.y);
+                    return !interactive(el);
+                });
+                return safe || { x: Math.round(w * 0.5), y: Math.max(60, Math.round(h * 0.18)) };
+            }, viewport);
+
+            await page.mouse.move(point.x, point.y);
+            await sleep(80, 160);
+            await page.mouse.down({ button: 'left' });
+            await sleep(60, 120);
+            await page.mouse.up({ button: 'left' });
+            await sleep(200, 400);
+
+            const focusState = await page.evaluate(() => {
+                const active = document.activeElement;
+                return {
+                    tag: active?.tagName || '',
+                    name: active?.getAttribute?.('name') || '',
+                    isMessage: active?.getAttribute?.('name') === 'message'
+                };
+            });
+
+            if (focusState.isMessage) {
+                // 极端情况下点击仍停留在输入框，退回 blur 保证焦点移出
+                await page.evaluate(() => {
+                    const active = document.activeElement;
+                    if (active?.tagName === 'TEXTAREA') active.blur();
+                });
+                await sleep(100, 200);
+            }
+        };
+        await clickBlankSpace();
+
+        // 3. 选择模型
         if (modelId) {
             logger.debug('适配器', `选择模型: ${modelId}`, meta);
-            // 使用键盘导航展开模型选择框：按两次 Shift+Tab 然后 Enter
-            await page.keyboard.down('Shift');
-            await page.keyboard.press('Tab');
-            await page.keyboard.press('Tab');
-            await page.keyboard.up('Shift');
-            await sleep(100, 200);
-            await page.keyboard.press('Enter');
+            // 焦点已移出输入框，按一次 Shift+Tab 定位到模型选择器按钮（Max），再按 Enter 打开弹窗
+            const openPicker = async () => {
+                await page.keyboard.down('Shift');
+                await page.keyboard.press('Tab');
+                await page.keyboard.up('Shift');
+                await sleep(100, 200);
+                await page.keyboard.press('Enter');
+            };
+            await openPicker();
 
             // 获取模型配置，优先使用 codeName，否则使用 id
             const searchText = modelConfig?.codeName || modelId;
 
-            // 模拟粘贴输入模型名称
-            await page.evaluate((text) => {
-                document.execCommand('insertText', false, text);
-            }, searchText);
+            // 等待模型选择弹窗和已聚焦的搜索输入框
+            try {
+                await page.waitForFunction(
+                    () => {
+                        const dialog = document.querySelector('[role="dialog"]');
+                        if (!dialog) return false;
+                        const input = dialog.querySelector('input[role="combobox"]');
+                        return !!input && document.activeElement === input;
+                    },
+                    null,
+                    { timeout: 6000 }
+                );
+            } catch {
+                // 键盘路径未打开弹窗时，直接点击模型选择器按钮作为兜底
+                logger.debug('适配器', 'Shift+Tab+Enter 未打开模型选择弹窗，改用点击 Max 按钮', meta);
+                await safeClick(page, 'button:has-text("Max")', { bias: 'button' });
+                await page.waitForFunction(
+                    () => {
+                        const dialog = document.querySelector('[role="dialog"]');
+                        if (!dialog) return false;
+                        const input = dialog.querySelector('input[role="combobox"]');
+                        return !!input;
+                    },
+                    null,
+                    { timeout: 6000 }
+                ).catch(() => { });
+            }
 
-            // 等待过滤完成：第一个选项包含目标模型的主 ID
-            // searchText 可能是 codeName（含括号说明），但过滤后的选项应该包含 modelId
+            // 在弹窗搜索框内输入模型名称（真实键盘输入，触发站点过滤）
+            await page.keyboard.type(searchText, { delay: 40 });
+
+            // 等待过滤完成：选项列表中应包含目标模型 ID
+            let modelOptionFound = false;
             try {
                 await page.waitForFunction(
                     (targetId) => {
-                        const firstOption = document.querySelector('[role="option"]');
-                        return firstOption && firstOption.textContent?.includes(targetId);
+                        const dialog = document.querySelector('[role="dialog"]');
+                        if (!dialog) return false;
+                        const options = [...dialog.querySelectorAll('[role="option"]')];
+                        return options.some(o => o.textContent?.includes(targetId));
                     },
                     modelId,
-                    { timeout: 5000 }
+                    { timeout: 8000 }
                 );
+                modelOptionFound = true;
             } catch {
                 // 超时也继续，可能列表结构不同
                 logger.debug('适配器', `等待模型选项过滤超时，继续执行`, meta);
             }
-            await sleep(300, 500);
+
+            if (!modelOptionFound) await sleep(300, 600);
             await page.keyboard.press('Enter');
         }
 
-        // 3. 上传图片
+        // 4. 上传图片
         if (imgPaths && imgPaths.length > 0) {
             logger.info('适配器', `开始上传 ${imgPaths.length} 张图片`, meta);
             await pasteImages(page, textareaSelector, imgPaths, {}, meta);
             logger.info('适配器', '图片上传完成', meta);
         }
 
-        // 4. 填写提示词
+        // 5. 聚焦聊天输入框，填写提示词并发送
         await safeClick(page, textareaSelector, { bias: 'input' });
         logger.info('适配器', '输入提示词...', meta);
         await humanType(page, textareaSelector, prompt);
 
-        // 5. 先启动 API 监听
+        // 6. 先启动 API 监听
         logger.debug('适配器', '启动 API 监听...', meta);
         const responsePromise = waitApiResponse(page, {
             urlMatch: '/nextjs-api/stream',
@@ -106,7 +207,7 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
             meta
         });
 
-        // 6. 发送提示词
+        // 7. 发送提示词
         logger.info('适配器', '发送提示词...', meta);
         await safeClick(page, 'button[type="submit"]', { bias: 'button' });
 
@@ -212,6 +313,7 @@ export const manifest = {
         { id: 'gemini-2.5-pro', imagePolicy: 'optional', type: 'text' },
         { id: 'claude-haiku-4-5-20251001', imagePolicy: 'forbidden', type: 'text' },
         { id: 'gemini-3-flash', imagePolicy: 'optional', type: 'text' },
+        { id: 'gemini-3.5-flash-high', imagePolicy: 'optional', type: 'text' },
         { id: 'gpt-5.2-high', imagePolicy: 'optional', type: 'text' },
         { id: 'gpt-5.1', imagePolicy: 'optional', type: 'text' },
         { id: 'gpt-5.2', imagePolicy: 'optional', type: 'text' },
@@ -221,8 +323,10 @@ export const manifest = {
         { id: 'grok-4.1-thinking', imagePolicy: 'forbidden', type: 'text' },
         { id: 'qwen3.5-max-preview', imagePolicy: 'forbidden', type: 'text' },
         { id: 'claude-sonnet-4-6', imagePolicy: 'optional', type: 'text' },
+        { id: 'claude-sonnet-5-high', imagePolicy: 'optional', type: 'text' },
         { id: 'grok-4.1', imagePolicy: 'forbidden', type: 'text' },
         { id: 'gpt-5.4-mini-high', imagePolicy: 'optional', type: 'text' },
+        { id: 'gpt-5.5-instant', imagePolicy: 'optional', type: 'text' },
         { id: 'gpt-5.3-chat-latest', imagePolicy: 'forbidden', type: 'text' },
         { id: 'glm-5', imagePolicy: 'forbidden', type: 'text' },
         { id: 'gpt-5.1-high', imagePolicy: 'optional', type: 'text' },
@@ -323,6 +427,7 @@ export const manifest = {
         { id: 'qwen3.6-plus', imagePolicy: 'forbidden', type: 'text' },
         { id: 'qwen3.5-397b-a17b', imagePolicy: 'forbidden', type: 'text' },
         { id: 'glm-5.1', imagePolicy: 'forbidden', type: 'text' },
+        { id: 'glm-5.2', imagePolicy: 'forbidden', type: 'text' },
         { id: 'trinity-large-thinking', imagePolicy: 'forbidden', type: 'text' },
         { id: 'mimo-v2-omni', imagePolicy: 'optional', type: 'text' },
         { id: 'kimi-k2.5', imagePolicy: 'optional', type: 'text' },

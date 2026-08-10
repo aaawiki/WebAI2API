@@ -126,6 +126,19 @@ function getWebGLPlatform(osName) {
 }
 
 /**
+ * 从保存的指纹 userAgent 推断操作系统
+ * @param {object} fingerprintData - 指纹数据
+ * @returns {string|null}
+ */
+function getFingerprintOS(fingerprintData) {
+    const ua = fingerprintData?.navigator?.userAgent || '';
+    if (/Windows/i.test(ua)) return 'windows';
+    if (/Macintosh|Mac OS X/i.test(ua)) return 'macos';
+    if (/Linux/i.test(ua)) return 'linux';
+    return null;
+}
+
+/**
  * 获取或生成持久化指纹 (含 WebGL 配置校验)
  * @param {string} filePath - JSON文件保存路径
  */
@@ -152,7 +165,17 @@ async function getPersistentFingerprint(filePath) {
         }
     }
 
-    // 2. 校验 WebGL 配置的有效性 (从 videoCard 读取)
+    // 2. 校验指纹操作系统与当前系统是否一致
+    if (fingerprintData) {
+        const savedOS = getFingerprintOS(fingerprintData);
+        if (savedOS && savedOS !== currentOS) {
+            logger.warn('浏览器', `保存的指纹操作系统(${savedOS})与当前系统(${currentOS})不匹配，将重新生成`);
+            fingerprintData = null;
+            shouldSave = true;
+        }
+    }
+
+    // 3. 校验 WebGL 配置的有效性 (从 videoCard 读取)
     if (fingerprintData?.videoCard?.['webGl:vendor'] && fingerprintData?.videoCard?.['webGl:renderer']) {
         const savedVendor = fingerprintData.videoCard['webGl:vendor'];
         const savedRenderer = fingerprintData.videoCard['webGl:renderer'];
@@ -171,7 +194,7 @@ async function getPersistentFingerprint(filePath) {
         }
     }
 
-    // 3. 如果指纹完全不存在，生成新的基础指纹
+    // 4. 如果指纹完全不存在，生成新的基础指纹
     if (!fingerprintData) {
         logger.info('浏览器', `正在为系统 [${currentOS}] 生成新指纹...`);
         const generatorOptions = {
@@ -202,7 +225,7 @@ async function getPersistentFingerprint(filePath) {
         shouldSave = true;
     }
 
-    // 4. 如果 WebGL 配置为空，重新生成
+    // 5. 如果 WebGL 配置为空，重新生成
     if (!webglPair) {
         try {
             logger.info('浏览器', `正在生成新的 WebGL 配置 (${targetWebGLOS})...`);
@@ -221,7 +244,7 @@ async function getPersistentFingerprint(filePath) {
         }
     }
 
-    // 5. 如果 Canvas 噪点不存在，生成新的
+    // 6. 如果 Canvas 噪点不存在，生成新的
     if (fingerprintData.canvasOffset === undefined) {
         const offset = Math.floor(Math.random() * 41) - 20;
         fingerprintData.canvasOffset = offset;
@@ -229,7 +252,7 @@ async function getPersistentFingerprint(filePath) {
         shouldSave = true;
     }
 
-    // 5. 如果有变动，保存回文件
+    // 7. 如果有变动，保存回文件
     if (shouldSave) {
         fs.writeFileSync(filePath, JSON.stringify(fingerprintData, null, 2));
         logger.info('浏览器', `指纹已更新并保存至: ${filePath}`);

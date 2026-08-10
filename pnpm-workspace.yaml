@@ -2,5 +2,9 @@ allowBuild:
   - better-sqlite3
   - sharp
 
+allowBuilds:
+  better-sqlite3: set this to true or false
+  sharp: set this to true or false
+
 packages:
   - '!webui/**'
