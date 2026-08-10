@@ -6,5 +6,6 @@ camoufox/
 .git/
 .github/
 .workbuddy/
+.playwright-cli/
 *.md
 !README.md
