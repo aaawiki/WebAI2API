@@ -276,7 +276,8 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
         logger.info('适配器', `已获取文本内容 (${textContent.length} 字符)`, meta);
         logger.info('适配器', '文本生成完成，任务完成', meta);
 
-        const trimmedThinking = thinkingContent.trim();
+        const includeReasoning = meta?.reasoning === true;
+        const trimmedThinking = includeReasoning ? thinkingContent.trim() : '';
         const result = { text: textContent.trim() };
 
         // 返回结果（如果有 thinking 则包含 reasoning）

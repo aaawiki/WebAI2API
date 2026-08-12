@@ -206,7 +206,7 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
         if (resultText) {
             logger.info('适配器', `生成完成，文本长度: ${resultText.length}`, meta);
             const result = { text: resultText };
-            if (reasoningText) {
+            if (reasoningText && meta?.reasoning === true) {
                 result.reasoning = reasoningText;
             }
             return result;

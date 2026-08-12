@@ -261,6 +261,9 @@ export function loadConfig() {
     // 设置 Pool 配置默认值
     if (!config.backend) config.backend = {};
     if (!config.backend.pool) config.backend.pool = {};
+    if (config.backend.hideReasoningContent === undefined) {
+        config.backend.hideReasoningContent = false;
+    }
 
     if (!config.backend.pool.strategy) {
         config.backend.pool.strategy = 'least_busy';

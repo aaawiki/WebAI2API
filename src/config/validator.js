@@ -68,6 +68,11 @@ export function validateServerConfig(data) {
         errors.push('imageMarkdown 必须是布尔值');
     }
 
+    // Hide Reasoning Content 校验
+    if (data.hideReasoningContent !== undefined && typeof data.hideReasoningContent !== 'boolean') {
+        errors.push('hideReasoningContent 必须是布尔值');
+    }
+
     return { valid: errors.length === 0, errors };
 }
 

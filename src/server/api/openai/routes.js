@@ -123,7 +123,8 @@ export function createOpenAIRouter(context) {
             }
 
             const { prompt, imagePaths, modelId, modelName } = parseResult.data;
-            const reasoning = data.reasoning === true;
+            const hideReasoning = config?.backend?.hideReasoningContent === true;
+            const reasoning = data.reasoning === true && !hideReasoning;
 
             logger.info('服务器', `[队列] 请求入队: ${prompt.slice(0, 100)}...`, { id: requestId, images: imagePaths.length });
 

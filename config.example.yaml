@@ -17,6 +17,10 @@ server:
   imageMarkdown: false
 
 backend:
+  # 强制只返回正文，不返回 reasoning_content (思考过程)
+  # - false: 随请求控制，参数 reasoning: true 时返回思考
+  # - true:  无论是否传 reasoning: true，都只返回正文
+  hideReasoningContent: false
   # ========================================
   # Pool 配置
   # ========================================

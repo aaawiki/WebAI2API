@@ -220,7 +220,7 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
 
         if (text) {
             logger.info('适配器', `解析成功，文本长度: ${text.length}，思考长度: ${reasoning?.length || 0}`, meta);
-            return reasoning ? { text, reasoning } : { text };
+            return reasoning && meta?.reasoning === true ? { text, reasoning } : { text };
         } else {
             return { error: '未能从响应中提取文本' };
         }

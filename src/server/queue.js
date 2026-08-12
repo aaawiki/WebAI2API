@@ -165,6 +165,9 @@ export function createQueueManager(queueConfig, callbacks) {
             let reasoningContent = null;  // 思考过程内容
             let historyResponseText = '';  // 历史记录中存储的文本（不含 base64）
 
+            // 全局开关：强制只返回正文
+            const hideReasoning = config?.backend?.hideReasoningContent === true;
+
             if (result.image) {
                 // 判断是否开启 Markdown 格式
                 const imageMarkdown = config?.server?.imageMarkdown || false;
@@ -180,8 +183,8 @@ export function createQueueManager(queueConfig, callbacks) {
                 historyResponseText = result.text || '';
             }
 
-            // 提取思考过程（如果有）
-            if (result.reasoning) {
+            // 提取思考过程（如果有，适配器亦不会生成）
+            if (result.reasoning && !hideReasoning) {
                 reasoningContent = result.reasoning;
             }
 

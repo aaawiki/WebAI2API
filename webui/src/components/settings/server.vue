@@ -13,7 +13,8 @@ const formData = reactive({
     logLevel: 'info',
     queueBuffer: 2,
     imageLimit: 5,
-    imageMarkdown: false
+    imageMarkdown: false,
+    hideReasoningContent: false
 });
 
 onMounted(async () => {
@@ -157,6 +158,18 @@ const handleSave = async () => {
                             开启此项需要客户端支持渲染 Markdown
                         </div>
                         <a-switch v-model:checked="formData.imageMarkdown" />
+                    </div>
+                </a-col>
+
+                <!-- 只返回正文 -->
+                <a-col :xs="24" :md="12">
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-weight: 600; margin-bottom: 4px;">只返回正文</div>
+                        <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 8px;">
+                            开启后所有请求都不返回思考过程<br>
+                            即使请求传了 reasoning: true 也会被过滤
+                        </div>
+                        <a-switch v-model:checked="formData.hideReasoningContent" />
                     </div>
                 </a-col>
             </a-row>

@@ -271,10 +271,10 @@ async function generate(context, prompt, imgPaths, modelId, meta = {}) {
         if (fullText) {
             logger.info('适配器', `获取文本成功，长度: ${fullText.length}`, meta);
             const result = { text: fullText };
-            // 如果有思考过程，添加到 reasoning 字段
-            if (thinkingText.trim()) {
-                logger.info('适配器', `获取思考过程，长度: ${thinkingText.length}`, meta);
-                result.reasoning = thinkingText;
+            const trimmedThinking = meta?.reasoning ? thinkingText.trim() : '';
+            if (trimmedThinking) {
+                logger.info('适配器', `获取思考过程，长度: ${trimmedThinking.length}`, meta);
+                result.reasoning = trimmedThinking;
             }
             return result;
         } else {
