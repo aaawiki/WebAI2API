@@ -17,6 +17,7 @@ import { parseRequest } from './parse.js';
 export function createOpenAIRouter(context) {
     const {
         backendName,
+        config,
         getModels,
         getImagePolicy,
         getModelType,
